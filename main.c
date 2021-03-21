@@ -105,6 +105,14 @@
 #define UART_RX_BUF_SIZE                256                                         /**< UART RX buffer size. */
 
 #define DEBUG_ECHO (1)
+#define DEBUG_BOARD (1)
+#if DEBUG_BOARD
+    #define DEBUG_RX_PIN_NUMBER 19
+    #define DEBUG_TX_PIN_NUMBER 20
+    #define DEBUG_LED1_EN   10 
+    #define DEBUG_LED2_EN   24
+    #define DEBUG_LED3_EN   23
+#endif
 
 
 BLE_NUS_DEF(m_nus, NRF_SDH_BLE_TOTAL_LINK_COUNT);                                   /**< BLE NUS service instance. */
@@ -601,8 +609,13 @@ static void uart_init(void)
     uint32_t                     err_code;
     app_uart_comm_params_t const comm_params =
     {
+        #if DEBUG_BOARD
+        .rx_pin_no    = DEBUG_RX_PIN_NUMBER,
+        .tx_pin_no    = DEBUG_TX_PIN_NUMBER,
+        #else
         .rx_pin_no    = RX_PIN_NUMBER,
         .tx_pin_no    = TX_PIN_NUMBER,
+        #endif
         .rts_pin_no   = RTS_PIN_NUMBER,
         .cts_pin_no   = CTS_PIN_NUMBER,
         .flow_control = APP_UART_FLOW_CONTROL_DISABLED,
@@ -737,6 +750,16 @@ int main(void)
     printf("\r\nUART started.\r\n");
     NRF_LOG_INFO("Debug logging for UART over RTT started.");
     advertising_start();
+
+    #if DEBUG_BOARD
+    nrf_gpio_cfg_output(DEBUG_LED1_EN);
+    nrf_gpio_cfg_output(DEBUG_LED2_EN);
+    nrf_gpio_cfg_output(DEBUG_LED3_EN);
+
+    nrf_gpio_pin_write(DEBUG_LED1_EN, 1);
+    nrf_gpio_pin_write(DEBUG_LED2_EN, 1);
+    nrf_gpio_pin_write(DEBUG_LED3_EN, 1);
+    #endif
 
     // Enter main loop.
     for (;;)
