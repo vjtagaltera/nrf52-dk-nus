@@ -733,6 +733,16 @@ int main(void)
 {
     bool erase_bonds;
 
+    #if DEBUG_BOARD
+    nrf_gpio_cfg_output(DEBUG_LED1_EN);
+    nrf_gpio_cfg_output(DEBUG_LED2_EN);
+    nrf_gpio_cfg_output(DEBUG_LED3_EN);
+
+    nrf_gpio_pin_write(DEBUG_LED1_EN, 1);
+    nrf_gpio_pin_write(DEBUG_LED2_EN, 1);
+    nrf_gpio_pin_write(DEBUG_LED3_EN, 1);
+    #endif
+
     // Initialize.
     uart_init();
     log_init();
@@ -750,16 +760,6 @@ int main(void)
     printf("\r\nUART started.\r\n");
     NRF_LOG_INFO("Debug logging for UART over RTT started.");
     advertising_start();
-
-    #if DEBUG_BOARD
-    nrf_gpio_cfg_output(DEBUG_LED1_EN);
-    nrf_gpio_cfg_output(DEBUG_LED2_EN);
-    nrf_gpio_cfg_output(DEBUG_LED3_EN);
-
-    nrf_gpio_pin_write(DEBUG_LED1_EN, 1);
-    nrf_gpio_pin_write(DEBUG_LED2_EN, 1);
-    nrf_gpio_pin_write(DEBUG_LED3_EN, 1);
-    #endif
 
     // Enter main loop.
     for (;;)
