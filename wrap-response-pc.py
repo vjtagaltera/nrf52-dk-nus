@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # wrap-response-pc.py
 
+
 import serial.tools.list_ports
 import serial
 import re, os, time, threading, copy
@@ -228,7 +229,7 @@ class SerialConnection(object):
                 self._port_file_name = ('%s:' % self._working_port.port_name) [0:5] # max 5 chars. so COM11: is COM11
             try:
                 self._ser = None
-                ser = serial.Serial(self._port_file_name, 115200, timeout=0.01)
+                ser = serial.Serial(self._port_file_name, 115200, timeout=0.01, writeTimeout=0)
                 self._ser = ser
             except:
                 pass
@@ -250,13 +251,14 @@ class SerialConnection(object):
             return None
         # prepend one and append two delineators:
         ##self._ser.write(data_bytes + sliplib.END)
+        self._ser.write(data_bytes)
         return True
 
     def recv_data(self, timeout=0.5):
         if self._init_ok != True:
             return None
         ##pkt_end = sliplib.END + sliplib.END
-        pkt_end = "\n\r"
+        pkt_end = b"\r\n"
         ret_data = self._rxthread.get_data(timeout=timeout, up_to_chars=pkt_end)
         return ret_data
 
@@ -285,60 +287,82 @@ if __name__ == '__main__':
         print(" exception: ", repr(e))
 
     if ser is not None and ser.init_ok():
-        data_len = 20 # less than 244*2=488
-        data = ''
-        data_seg = ''
-        for i in range(0, data_len, 5):
-            data_seg = ("x%4d" % (i+5)).replace(' ', '_')
-            data += data_seg
-        data += "\n" # trigger sending on the nrf device
+        stats_tx_data_len = 0 # less than 244*2=488
+        stats_rx_data_len = 0
 
-        #data = b'\xC0' + data.encode() + b'\xC0' # 0xC0 is SLIP escape
-        ##data = sliplib.encode(data.encode())
-        print(" data len: ", len(data))
-
+        rx_data_bytes = b''
         tm0=time.time()
         ##ser.send_data(data)
         tm1=time.time()
         while True:
-            rv = ser.recv_data(timeout=0.5)
+            rv = ser.recv_data(timeout=5)
             tm2=time.time()
+            tdata = None
             if len(rv) > 0:
-                print("  %.2f rv: " % ( tm2 - tm0 ), len(rv), rv)
-                ptr = 0
-                dlen = len(rv)
-                while ptr <= dlen:
-                    ##idx = rv.find(sliplib.END, ptr)
-                    idx = dlen-1  ## fake idx
-                    if idx < 0:
-                        rv = rv[ptr:]
-                        print(" Drop: ", len(rv))
-                        break
-                    if idx >= 0:
-                        if idx < dlen and idx >= ptr:
-                            pkt_raw = rv[ptr:idx+1]
-                            rlen = idx+1 - ptr
-                            ##if sliplib.is_valid(pkt_raw):
-                            ##    pkt = sliplib.decode(pkt_raw)
-                            ##    print(" Decoded: ", len(pkt), pkt)
-                            ##else:
-                            ##    print(" Error decoding: ", len(pkt), pkt)
-                            ptr += rlen
+                print("  %.2f rv: " % ( tm2 - tm0 ), len(rv), repr(rv))
+                # nrf boot:  b'\r\nUART started.\r\n'
+                # normal:    b'/GET info\r\n'
+                rx_data_bytes += rv
+                stats_rx_data_len += len(rv)
+                if rx_data_bytes[-1:] == b'\r' or rx_data_bytes[-1:] == b'\n':
+                    # including rx_data_bytes[-2:] == b'\r\n'
+                    rdata = rx_data_bytes.strip()
+                    rx_data_bytes = b''
+                    try:
+                        tmp_data = rdata.decode()
+                        rdata = tmp_data
+                    except:
+                        pass
+                    if rdata.startswith('/GET info'):
+                        tdata = [
+                            b'{\n "request_type" : "get_info",\n "status":"ack"\n};\n',
+                            b'{\n "request_type": "get_info",\n "status": "success"\n};\n',
+                        ]
+                    elif rdata.startswith('/GET device_list'):
+                        tdata = [
+                            b'{\n "request_type" : "get_device_list",\n "status":"ack"\n};\n',
+                            b'{\n "status": "success",\n "request_type": "get_device_list",\n "result": [\n  { "name": "223344556677", "private": true, "signal-level": "-48" },\n  { "name": "22334466", "private": true, "signal-level": "-52" } \n ]\n};\n',
+                        ]
+            if tdata is not None:
+                for x in tdata:
+                    dlen_tx = len(x)
+                    dptr = 0
+                    if dlen_tx <= 0:
+                        continue
+                    while dlen_tx > 0:
+                        if dlen_tx > 20:
+                            y = x[dptr:dptr+20]
+                            dptr += 20
+                            dlen_tx -= 20
                         else:
-                            print(" Error: searching for sliplib.END ")
-                            break
-                if rv.find(data_seg.encode()) > 0:
-                    print("Data ending seg found")
-                    break
-            if tm2 - tm1 > 12: # 12: test duration 12 seconds
-                break
+                            y = x[dptr:]
+                            dlen_tx = 0
+                        tm_tx1 = time.time()
+                        for idx,_ in enumerate(y):
+                            yy = y[idx:idx+1]
+                            ser.send_data(yy)
+                            #time.sleep(0.001) # 1 byte / 2ms or 40ms/20byte
+                        tm_tx2 = time.time()
+                        time.sleep(0.060)  # 20 bytes / 60ms
+                        tm_tx3 = time.time()
+                        print("    sent seg %d %.3f %.3fsec" % (len(y), tm_tx2-tm_tx1, tm_tx3-tm_tx2))
+                    ser.send_data(b'\0')
+                    stats_tx_data_len += len(x)
+                    print("  sent len: ", len(x))
+                    print("  sent data: ", repr(x))
+                    time.sleep(1)
+
+            #if tm2 - tm1 > 1200: # 12: test duration 12 seconds
+            #    break
             time.sleep(0.010)
 
         ser.finish()
 
         print("")
-        print("  %.2f for write. %.2f to finish. rate %.3f " % (
-                tm1-tm0, tm2-tm0, data_len*2/(tm2-tm0) ))
-        print("  data written ", data)
+        print(" %.2f for initial write. %.2f to finish.  rx-rate %.3f  tx-rate %.3f" % (
+                tm1-tm0, tm2-tm0,
+                stats_rx_data_len/(tm2-tm0), stats_tx_data_len/(tm2-tm0) ))
+        print(" len data received ", stats_rx_data_len)
+        print(" len data written ", stats_tx_data_len)
 
 

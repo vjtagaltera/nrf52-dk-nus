@@ -61,4 +61,7 @@ update: 2022-11-14
                        avoid sending immediately to uart after a frame is reached.
                        likely it is a race condition on the "index" variable.
 
+      testing on pc: connect nrf52-dk pins rx8 tx6 to a ch340 usb serial dongle. 
+                     use wrap-response-pc.py to return result data.
+
 
