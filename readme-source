@@ -22,3 +22,43 @@ s112  s132
 $ rm -r pca10040/s112
 
 
+================================================================
+update: 2022-11-14
+
+[1] notice that the project is for a pca10040 debug board, not a nrf52840-dongle. 
+
+[2] the "segger embedded studio for arm v5.40c 32-bit" was set up to build for release.
+    in the Output directory there are artifacts for both debug and release.
+    the jlink used is segger jlink v6.88a
+
+[3] modify to build for nrf52-dk:
+
+[3.1] set "DEBUG_BOARD (0)" and "DEBUG_ECHO (0)". 
+      use "NRF_LOG_FLUSH() to flush rtt log.
+      log RX_PIN_NUMBER and TX_PIN_NUMBER. they are RX=8, TX=6. 
+
+      nrf-connect found advertising flag 0b0000_0101 bit2="BR/EDR not supported"
+                                                     bit0-"LE Limited discoverable mode"
+      modify, change "BLE_GAP_ADV_FLAGS_LE_ONLY_LIMITED_DISC_MODE" into "_GENERAL_DISC_MODE"
+      nrf-connect found advertising flag 0b0000_0110 bit2="BR/EDR not supported"
+                                                     bit1-"LE General discoverable mode"
+[3.2] probe uart pins: 
+      probe tx=P0.06, captured data when sending from nrf-connect. 
+      connect P0.06 to P0.08, when \n sent from nrf-connect, it received data.
+
+[3.3] code error: it is reported at 
+         void uart_event_handle(app_uart_evt_t * p_event) {
+         ...
+           case APP_UART_COMMUNICATION_ERROR:
+
+      debug: print BLE_NUS_MAX_DATA_LEN , it is 244.
+
+      debug: change the following 64 to 1024 to help log more
+        NRF_LOG_BACKEND_RTT_TEMP_BUFFER_SIZE 64
+        SEGGER_RTT_CONFIG_BUFFER_SIZE_UP 512
+
+      avoid the error: change data framing from \n to \0. 
+                       avoid sending immediately to uart after a frame is reached.
+                       likely it is a race condition on the "index" variable.
+
+
